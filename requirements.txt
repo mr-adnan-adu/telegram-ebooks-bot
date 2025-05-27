@@ -1,13 +1,4 @@
-# For rate limiting
-python-redis==4.5.5
-
-# For database (user preferences)
-sqlalchemy==2.0.19
-
-# For async HTTP requests
-httpx==0.24.1
-
 python-telegram-bot==20.3
 libgen-api==0.1.0
 python-dotenv==1.0.0
-psutil==5.9.5  # Add system monitoring
+redis==4.5.5  # Changed from python-redis to redis
