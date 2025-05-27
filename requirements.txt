@@ -1,4 +1,3 @@
 python-telegram-bot==20.3
 libgen-api==0.1.0
 python-dotenv==1.0.0
-redis==4.5.5  # Changed from python-redis to redis
