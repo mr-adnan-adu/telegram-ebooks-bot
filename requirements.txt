@@ -1,7 +1,8 @@
-python-telegram-bot==20.7
-requests==2.31.0
-beautifulsoup4==4.12.2
-lxml==4.9.3
-gunicorn==21.2.0
-fastapi==0.110.0
-uvicorn==0.29.0
+# For rate limiting
+python-redis==4.5.5
+
+# For database (user preferences)
+sqlalchemy==2.0.19
+
+# For async HTTP requests
+httpx==0.24.1
