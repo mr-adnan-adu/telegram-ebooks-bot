@@ -12,46 +12,46 @@ from telegram.ext import (
     ContextTypes,
 )
 
-# Configure logging
+# Setup logging
 logging.basicConfig(
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
     level=logging.INFO
 )
 logger = logging.getLogger(__name__)
 
-# Load environment variables
+# Load config
 load_dotenv('config/.env')
 TOKEN = os.getenv("TELEGRAM_TOKEN")
 PORT = int(os.getenv("PORT", 10000))
 RENDER_URL = os.getenv("RENDER_URL")
 
-# Initialize Libgen client
+# Initialize Libgen
 libgen = LibgenSearch()
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Send welcome message"""
     await update.message.reply_text(
         "📚 Welcome to Libgen eBook Bot!\n\n"
-        "Send me a book name, author, or ISBN to search."
+        "Send me a book name, author or ISBN to search."
     )
 
 async def search_book(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Handle book search requests"""
+    """Handle search queries"""
     try:
-        query = update.message.text
+        query = update.message.text.strip()
         if len(query) < 3:
-            await update.message.reply_text("❌ Query too short. Minimum 3 characters required.")
+            await update.message.reply_text("❌ Query too short (min 3 chars)")
             return
 
-        results = libgen.search_title(query)[:5]  # Limit to 5 results
+        results = libgen.search_title(query)[:5]  # Limit results
         
         if not results:
-            await update.message.reply_text("❌ No results found. Try another search.")
+            await update.message.reply_text("❌ No results found")
             return
 
         keyboard = [
             [InlineKeyboardButton(
-                f"{idx+1}. {book['Title'][:50]}... ({book['Year']})", 
+                f"{idx+1}. {book['Title'][:30]}... ({book['Year']})", 
                 callback_data=str(idx))
             ] for idx, book in enumerate(results)
         ]
@@ -64,10 +64,10 @@ async def search_book(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     except Exception as e:
         logger.error(f"Search error: {e}")
-        await update.message.reply_text("⚠️ An error occurred. Please try again later.")
+        await update.message.reply_text("⚠️ Service temporarily unavailable")
 
 async def handle_button(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Handle inline button presses"""
+    """Process inline keyboard selections"""
     try:
         query = update.callback_query
         await query.answer()
@@ -82,65 +82,48 @@ async def handle_button(update: Update, context: ContextTypes.DEFAULT_TYPE):
         selected = results[choice]
         download_links = libgen.resolve_download_links(selected)
         
-        message = (
-            f"📖 *Title*: {selected['Title']}\n"
-            f"👤 *Author*: {selected['Author']}\n"
-            f"📅 *Year*: {selected['Year']}\n"
-            f"📚 *Publisher*: {selected['Publisher']}\n"
-            f"🔢 *Pages*: {selected['Pages']}\n"
-            f"📦 *Size*: {selected['Size']}\n"
-            f"📝 *Extension*: {selected['Extension']}\n\n"
-            "🔗 *Download Links*:\n"
+        response = (
+            f"📖 <b>Title</b>: {selected['Title']}\n"
+            f"👤 <b>Author</b>: {selected['Author']}\n"
+            f"📅 <b>Year</b>: {selected['Year']}\n\n"
+            f"🔗 <b>Download</b>:\n"
+            + "\n".join(
+                f"- <a href='{link}'>{mirror}</a>"
+                for mirror, link in list(download_links.items())[:3]
+            )
         )
-        
-        # Add first 3 mirrors only to prevent message overflow
-        for mirror, link in list(download_links.items())[:3]:
-            message += f"- [{mirror}]({link})\n"
 
         await query.edit_message_text(
-            text=message,
-            parse_mode="Markdown",
+            text=response,
+            parse_mode="HTML",
             disable_web_page_preview=True
         )
 
     except Exception as e:
-        logger.error(f"Button handler error: {e}")
-        await query.edit_message_text("⚠️ Failed to load book details. Please try again.")
-
-async def error_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Log errors"""
-    logger.error(f"Update {update} caused error: {context.error}")
+        logger.error(f"Button error: {e}")
+        await query.edit_message_text("⚠️ Failed to load details")
 
 def main():
-    """Start the bot"""
-    try:
-        # Create Application
-        app = Application.builder().token(TOKEN).build()
+    """Start the bot in appropriate mode"""
+    app = Application.builder().token(TOKEN).build()
+    
+    # Register handlers
+    app.add_handler(CommandHandler("start", start))
+    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, search_book))
+    app.add_handler(CallbackQueryHandler(handle_button))
 
-        # Add handlers
-        app.add_handler(CommandHandler("start", start))
-        app.add_handler(CommandHandler("help", start))  # Reuse start as help
-        app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, search_book))
-        app.add_handler(CallbackQueryHandler(handle_button))
-        
-        # Error handler
-        app.add_error_handler(error_handler)
-
-        # Deployment mode detection
-        if RENDER_URL:
-            logger.info("Starting in WEBHOOK mode")
-            app.run_webhook(
-                listen="0.0.0.0",
-                port=PORT,
-                webhook_url=f"{RENDER_URL}/webhook",
-                secret_token='WEBHOOK_SECRET'  # Optional security
-            )
-        else:
-            logger.info("Starting in POLLING mode")
-            app.run_polling()
-
-    except Exception as e:
-        logger.critical(f"Failed to start bot: {e}")
+    # Start bot based on environment
+    if RENDER_URL:
+        logger.info("Starting in WEBHOOK mode")
+        app.run_webhook(
+            listen="0.0.0.0",
+            port=PORT,
+            webhook_url=f"{RENDER_URL}/webhook",
+            secret_token=os.getenv("WEBHOOK_SECRET", "")
+        )
+    else:
+        logger.info("Starting in POLLING mode")
+        app.run_polling()
 
 if __name__ == "__main__":
     main()
